@@ -1,13 +1,15 @@
 # Packages -----------------------------------------------------------
 library(countrycode)
-#library(gridExtra)
 library(haven)
-#library(Hmisc)
 library(janitor)
-#library(readxl)
-#library(rvest)
 library(tidyverse)
-#library(wbstats)
+
+# Temporary (might be useful)
+# library(gridExtra)
+# library(Hmisc)
+# library(readxl)
+# library(rvest)
+# library(wbstats)
 
 
 # 1. OUTCOME -----------------------------------------------------------------
