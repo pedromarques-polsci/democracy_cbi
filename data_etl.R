@@ -6,16 +6,10 @@ library(janitor)
 library(readxl)
 library(tidyverse)
 library(vdemdata)
+library(wbstats)
 
 # vdemdata package installation:
 # devtools::install_github("vdeminstitute/vdemdata")
-
-# Temporary (might be useful)
-# library(gridExtra)
-# library(Hmisc)
-# library(readxl)
-# library(rvest)
-# library(wbstats)
 
 # 1. OUTCOME -----------------------------------------------------------------
 cbi_garriga <- read_dta("raw_data/cbi_2025_garriga.dta")
@@ -25,7 +19,7 @@ cbi_garriga_fill <- cbi_garriga %>%
   complete(cowcode = cowcode, year = 1970:2023) %>% 
   arrange(cowcode, year) %>% 
   group_by(cowcode) %>% 
-  fill(cname, cowcode, ccodewb, .direction = "downup") %>% 
+  fill(cname, ccodewb, .direction = "downup") %>% 
   ungroup() %>% 
   arrange(cowcode, year)
 
@@ -33,7 +27,7 @@ cbi_garriga_fill <- cbi_garriga %>%
 cbi_garriga_fill %>% 
   count(year, cowcode) %>% filter(n > 1)
 
-# Counting missings per country
+# Counting explicit missings per country
 cbi_missings <- cbi_garriga_fill %>% 
   group_by(cowcode) %>% 
   summarise(cbi_missing = sum(is.na(lvau_garriga)),
@@ -49,7 +43,8 @@ vdem_dataset <- vdemdata::vdem %>%
 vdem_dataset %>% 
   count(year, co_wcode) %>% filter(n > 1)
 
-# Checking countries with missing cowcode
+# Countries with missing CoW codes that are not present in CBI Dataset can be
+# ignored since they will not be in the final dataset
 vdem_dataset %>% filter(is.na(co_wcode)) %>% distinct(country_name)
 
 # 3. COVARIATES --------------------------------------------------------------
@@ -75,24 +70,67 @@ era_class <- raw_file %>%
 # CoW coding
 era_class_adj <- era_class %>% 
   mutate(year = year(month),
+         
+         # Disambiguation
          country_name = 
            case_when(country_name == "West Bank and Gaza" ~ 
                        "Palestine/West Bank and Gaza",
                      country_name == "Serbia, Rep. of" ~ 
                        "Serbia",
                      .default = country_name),
-         cwcode = countrycode(country_name, origin = 'country.name', 
+         
+         # Matching country names to CoW Codes
+         cowcode_temp = countrycode(country_name, origin = 'country.name', 
                                destination = 'cown')) %>% 
-  left_join(cbi_garriga_fill %>% select(cname, cowcode), 
-            join_by(country_name == cname)) %>% 
-  mutate(cowcode = ifelse(is.na(cwcode), cowcode, cwcode)) %>% 
-  select(-cowcode1)
-
-# You can ignore many-to-many warning, since each country corresponds to
-# an unique cowcode
   
-# Intersecting missing country code and CBI dataset's country list
-no_cow <- era_class_adj %>% filter(is.na(cowcode1)) %>% distinct(country_name)
-intersect(no_cow$country_name, cbi_garriga_fill$cname)
+  # Getting additional CoW codes where countrycode package failed
+  left_join(cbi_garriga_fill %>% select(cname, cowcode), 
+            relationship = "many-to-many",
+            join_by(country_name == cname)) %>% 
+  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
+  select(-cowcode_temp)
 
-## 3.2 Exchange Regime -------------------------------------------------------
+era_class_adj %>% filter(is.na(cowcode)) %>% distinct(country_name)
+
+## 3.2 Redistributive data ----------------------------------------------------
+load("raw_data/swiid9_7.RDA")
+
+# CoW coding
+gini <- swiid_summary %>% 
+  select(country, year, gini_disp, gini_mkt) %>% 
+  mutate(cowcode_temp = countrycode(country, origin = 'country.name', 
+                       destination = 'cown')) %>% 
+  left_join(cbi_garriga_fill %>% select(cname, cowcode), 
+            relationship = "many-to-many",
+            join_by(country == cname)) %>% 
+  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
+  select(-cowcode_temp)
+
+gini %>% filter(is.na(cowcode)) %>% distinct(country)
+
+## 3.3 Populism -------------------------------------------------------------
+populism <- read_excel("raw_data/PLE_panel.xlsx") %>% 
+  mutate(cowcode = countrycode(iso, origin = 'iso3c', destination = 'cown'))
+
+populism %>% filter(is.na(cowcode)) %>% distinct(country)
+
+## 3.4 Globalization ---------------------------------------------------------
+ecopen_wb <- wb_data(indicator = "NE.IMP.GNFS.ZS") %>% 
+  mutate(cowcode_temp = countrycode(iso3c, origin = 'iso3c', 
+                               destination = 'cown'),
+         country_name = 
+           case_when(country == "West Bank and Gaza" ~ 
+                       "Palestine/West Bank and Gaza",
+                     country == "Cayman Islands" ~ 
+                       "Cayman",
+                     .default = country)) %>% 
+  left_join(cbi_garriga_fill %>% select(cname, cowcode), 
+            relationship = "many-to-many",
+            join_by(country == cname)) %>% 
+  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
+  select(-cowcode_temp) %>% 
+  rename(ecopen = NE.IMP.GNFS.ZS)
+
+ecopen_wb %>% filter(is.na(cowcode)) %>% distinct(country) %>% print(n = 30)
+
+# 4. FINAL DATASET --------------------------------------------------------
