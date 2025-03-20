@@ -15,7 +15,7 @@ library(wbstats)
 cbi_garriga <- read_dta("raw_data/cbi_2025_garriga.dta")
 
 # Making missings explicit
-cbi_garriga_fill <- cbi_garriga %>% 
+cbi_garriga_adj <- cbi_garriga %>% 
   complete(cowcode = cowcode, year = 1970:2023) %>% 
   arrange(cowcode, year) %>% 
   group_by(cowcode) %>% 
@@ -24,11 +24,11 @@ cbi_garriga_fill <- cbi_garriga %>%
   arrange(cowcode, year)
 
 # Checking primary key
-cbi_garriga_fill %>% 
+cbi_garriga_adj %>% 
   count(year, cowcode) %>% filter(n > 1)
 
 # Counting explicit missings per country
-cbi_missings <- cbi_garriga_fill %>% 
+cbi_missings <- cbi_garriga_adj %>% 
   group_by(cowcode) %>% 
   summarise(cbi_missing = sum(is.na(lvau_garriga)),
             cname = first(cname)) %>% select(cname, everything())
@@ -84,11 +84,19 @@ era_class_adj <- era_class %>%
                                destination = 'cown')) %>% 
   
   # Getting additional CoW codes where countrycode package failed
-  left_join(cbi_garriga_fill %>% select(cname, cowcode), 
-            relationship = "many-to-many",
+  left_join(cbi_garriga_adj %>% select(cname, cowcode) %>% 
+              distinct(cname, cowcode), 
             join_by(country_name == cname)) %>% 
   mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
   select(-cowcode_temp)
+
+era_class_adj %>% group_by(country_name, year) %>% 
+  mutate(flex = ifelse(fine_era[which(month == "1940-12-01")]
+                       > fine_era[which(month == "1940-01-01")],
+                       1, 0),
+         unflex = ifelse(fine_era[which(month == "1940-01-01")]
+                         > fine_era[which(month == "1940-12-01")],
+                         1, 0))
 
 era_class_adj %>% filter(is.na(cowcode)) %>% distinct(country_name)
 
@@ -100,11 +108,12 @@ gini <- swiid_summary %>%
   select(country, year, gini_disp, gini_mkt) %>% 
   mutate(cowcode_temp = countrycode(country, origin = 'country.name', 
                        destination = 'cown')) %>% 
-  left_join(cbi_garriga_fill %>% select(cname, cowcode), 
-            relationship = "many-to-many",
+  left_join(cbi_garriga_adj %>% select(cname, cowcode) %>% 
+              distinct(cname, cowcode), 
             join_by(country == cname)) %>% 
   mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
-  select(-cowcode_temp)
+  select(-cowcode_temp) %>% 
+  distinct(cowcode, year, .keep_all = T)
 
 gini %>% filter(is.na(cowcode)) %>% distinct(country)
 
@@ -124,8 +133,8 @@ ecopen_wb <- wb_data(indicator = "NE.IMP.GNFS.ZS") %>%
                      country == "Cayman Islands" ~ 
                        "Cayman",
                      .default = country)) %>% 
-  left_join(cbi_garriga_fill %>% select(cname, cowcode), 
-            relationship = "many-to-many",
+  left_join(cbi_garriga_adj %>% select(cname, cowcode) %>% 
+              distinct(cname, cowcode), 
             join_by(country == cname)) %>% 
   mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
   select(-cowcode_temp) %>% 
