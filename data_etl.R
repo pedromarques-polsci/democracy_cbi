@@ -63,14 +63,16 @@ era_class <- raw_file %>%
   slice(-2,-3) %>% select(-1) %>%
   row_to_names(row_number = 1) %>% rename(month = Country) %>% 
   pivot_longer(!month, names_to = "country_name", values_to = "fine_era") %>% 
-  mutate(month = ym(month)) %>% 
-  arrange(country_name, month) %>% 
-  select(country_name, month, fine_era)
+  mutate(date = ym(month),
+         month = month(date),
+         year = year(date),
+         fine_era = as.numeric(fine_era)) %>% 
+  arrange(country_name, date) %>% 
+  select(country_name, date, year, month, fine_era)
 
 # CoW coding
 era_class_adj <- era_class %>% 
-  mutate(year = year(month),
-         
+  mutate(
          # Disambiguation
          country_name = 
            case_when(country_name == "West Bank and Gaza" ~ 
@@ -90,15 +92,14 @@ era_class_adj <- era_class %>%
   mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
   select(-cowcode_temp)
 
-era_class_adj %>% group_by(country_name, year) %>% 
-  mutate(flex = ifelse(fine_era[which(month == "1940-12-01")]
-                       > fine_era[which(month == "1940-01-01")],
-                       1, 0),
-         unflex = ifelse(fine_era[which(month == "1940-01-01")]
-                         > fine_era[which(month == "1940-12-01")],
-                         1, 0))
-
 era_class_adj %>% filter(is.na(cowcode)) %>% distinct(country_name)
+
+era_class_final <- era_class_adj %>% 
+  select(-date) %>% 
+  pivot_wider(names_from = month,
+              values_from = fine_era, names_prefix = "m") %>% 
+  mutate(flex = ifelse(m12 > m1, 1, 0),
+         unflex = ifelse(m12 < m1, 1, 0))
 
 ## 3.2 Redistributive data ----------------------------------------------------
 load("raw_data/swiid9_7.RDA")
