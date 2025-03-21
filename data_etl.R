@@ -143,4 +143,64 @@ ecopen_wb <- wb_data(indicator = "NE.IMP.GNFS.ZS") %>%
 
 ecopen_wb %>% filter(is.na(cowcode)) %>% distinct(country) %>% print(n = 30)
 
+## 3.4 World Economic Outlook (IMF) ----------------------------------------
+# October 2024
+weo <- read.csv2("raw_data/weo_data.csv", na = c("n/a", "", "--"), 
+                 dec = ".") %>% 
+  slice(1:2157) %>% 
+  pivot_longer(cols = c(6:48), names_to = "year") %>% 
+  mutate(year = substr(year, 2, 5),
+         value = gsub(",", "", value),
+         value = as.numeric(value)) %>% 
+  clean_names() %>% 
+  pivot_wider(id_cols = c("iso", "country", "year"), 
+              names_from = c("subject_descriptor", "units"),
+              values_from = "value") %>% 
+  clean_names() %>% 
+  filter(!is.na(country)) %>% 
+  mutate(country = ifelse(country == "West Bank and Gaza", 
+                          "Palestine/West Bank and Gaza", country),
+         cowcode_temp = countrycode(iso, origin = 'iso3c', 
+                                    destination = 'cown')) %>% 
+  left_join(cbi_garriga_adj %>% select(cname, cowcode) %>% 
+              distinct(cname, cowcode), 
+            join_by(country == cname)) %>% 
+  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
+  rename(gdp_current_dollar = gross_domestic_product_current_prices_u_s_dollars,
+         real_gdp_pcp_ppp = gross_domestic_product_per_capita_constant_prices_purchasing_power_parity_2021_international_dollar,
+         inf_avg_cpi = inflation_average_consumer_prices_index,
+         inf_avg_pp = inflation_average_consumer_prices_percent_change,
+         inf_eop_cpi = inflation_end_of_period_consumer_prices_index,
+         inf_eop_pp = inflation_end_of_period_consumer_prices_percent_change,
+         unemp = unemployment_rate_percent_of_total_labor_force,
+         population = population_persons, # Millions
+         ggov_revenue_gdp = general_government_revenue_percent_of_gdp,
+         ggov_net_debt_gdp = general_government_net_debt_percent_of_gdp,
+         acc_balance_gdp = current_account_balance_percent_of_gdp)
+                          
+weo %>% filter(is.na(cowcode)) %>% distinct(country)  
+    
+weo %>% 
+  count(iso, year) %>% 
+  filter(n > 1)
+
 # 4. FINAL DATASET --------------------------------------------------------
+final_dataset <- cbi_garriga_adj %>% 
+  left_join(vdem_dataset %>% select(year:v2x_regime),
+            join_by(year, cowcode == co_wcode)) %>% 
+  left_join(era_class_final %>% select(year, cowcode, flex, unflex),
+            join_by(year, cowcode)) %>% 
+  left_join(gini %>% select(year:cowcode),
+            join_by(year, cowcode)) %>% 
+  left_join(populism %>% select(year:cowcode),
+            join_by(year, cowcode)) %>% 
+  left_join(ecopen_wb %>% select(date, ecopen, cowcode),
+            join_by(year == date, cowcode)) %>% 
+  left_join(weo %>% select(year:acc_balance_gdp, cowcode) %>% 
+              mutate(year = as.numeric(year)),
+            join_by(year, cowcode))
+
+# EXPORTING FINAL DATASET -------------------------------------------------
+write_csv(final_dataset, "processed_data/final_dataset.csv")
+write_rds(final_dataset, "processed_data/final_dataset.rds")
+write_dta(final_dataset, "processed_data/final_dataset.dta")
