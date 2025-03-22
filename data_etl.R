@@ -113,8 +113,7 @@ gini <- swiid_summary %>%
               distinct(cname, cowcode), 
             join_by(country == cname)) %>% 
   mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
-  select(-cowcode_temp) %>% 
-  distinct(cowcode, year, .keep_all = T)
+  select(-cowcode_temp)
 
 gini %>% filter(is.na(cowcode)) %>% distinct(country)
 
