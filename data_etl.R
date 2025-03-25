@@ -124,7 +124,7 @@ populism <- read_excel("raw_data/PLE_panel.xlsx") %>%
 populism %>% filter(is.na(cowcode)) %>% distinct(country)
 
 ## 3.4 Globalization ---------------------------------------------------------
-ecopen_wb <- wb_data(indicator = "NE.IMP.GNFS.ZS") %>% 
+ecopen_wb <- wb_data(indicator = "NE.TRD.GNFS.ZS") %>% 
   mutate(cowcode_temp = countrycode(iso3c, origin = 'iso3c', 
                                destination = 'cown'),
          country_name = 
@@ -138,7 +138,7 @@ ecopen_wb <- wb_data(indicator = "NE.IMP.GNFS.ZS") %>%
             join_by(country == cname)) %>% 
   mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
   select(-cowcode_temp) %>% 
-  rename(ecopen = NE.IMP.GNFS.ZS)
+  rename(ecopen = NE.TRD.GNFS.ZS)
 
 ecopen_wb %>% filter(is.na(cowcode)) %>% distinct(country) %>% print(n = 30)
 
