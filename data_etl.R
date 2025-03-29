@@ -113,9 +113,16 @@ gini <- swiid_summary %>%
               distinct(cname, cowcode), 
             join_by(country == cname)) %>% 
   mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
-  select(-cowcode_temp)
+  select(-cowcode_temp) %>% 
+  filter(country != "Soviet Union") 
+
+# Russian Federation and Soviet Union share the same cowcode, but Garriga's
+# dataset does not contain Soviet Union data
 
 gini %>% filter(is.na(cowcode)) %>% distinct(country)
+
+gini %>% 
+  count(year, cowcode) %>% filter(n > 1) %>% print(n = 90)
 
 ## 3.3 Populism -------------------------------------------------------------
 populism <- read_excel("raw_data/PLE_panel.xlsx") %>% 
@@ -198,6 +205,8 @@ final_dataset <- cbi_garriga_adj %>%
   left_join(weo %>% select(year:acc_balance_gdp, cowcode) %>% 
               mutate(year = as.numeric(year)),
             join_by(year, cowcode))
+
+final_dataset %>% count(cowcode, year) %>% filter(n > 1)
 
 # EXPORTING FINAL DATASET -------------------------------------------------
 write_csv(final_dataset, "processed_data/final_dataset.csv")
