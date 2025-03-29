@@ -89,8 +89,12 @@ era_class_adj <- era_class %>%
   left_join(cbi_garriga_adj %>% select(cname, cowcode) %>% 
               distinct(cname, cowcode), 
             join_by(country_name == cname)) %>% 
-  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
+  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp),
+         cowcode = ifelse(cowcode == 255, 260, cowcode)) %>% 
   select(-cowcode_temp)
+
+# Garriga and VDEM incorrectly inputs Germany's cowcode, but we
+# standardize it for each dataset
 
 era_class_adj %>% filter(is.na(cowcode)) %>% distinct(country_name)
 
@@ -112,7 +116,8 @@ gini <- swiid_summary %>%
   left_join(cbi_garriga_adj %>% select(cname, cowcode) %>% 
               distinct(cname, cowcode), 
             join_by(country == cname)) %>% 
-  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
+  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp),
+         cowcode = ifelse(cowcode == 255, 260, cowcode)) %>% 
   select(-cowcode_temp) %>% 
   filter(country != "Soviet Union") 
 
@@ -126,7 +131,8 @@ gini %>%
 
 ## 3.3 Populism -------------------------------------------------------------
 populism <- read_excel("raw_data/PLE_panel.xlsx") %>% 
-  mutate(cowcode = countrycode(iso, origin = 'iso3c', destination = 'cown'))
+  mutate(cowcode = countrycode(iso, origin = 'iso3c', destination = 'cown'),
+         cowcode = ifelse(cowcode == 255, 260, cowcode))
 
 populism %>% filter(is.na(cowcode)) %>% distinct(country)
 
@@ -134,7 +140,7 @@ populism %>% filter(is.na(cowcode)) %>% distinct(country)
 ecopen_wb <- wb_data(indicator = "NE.TRD.GNFS.ZS") %>% 
   mutate(cowcode_temp = countrycode(iso3c, origin = 'iso3c', 
                                destination = 'cown'),
-         country_name = 
+         country = 
            case_when(country == "West Bank and Gaza" ~ 
                        "Palestine/West Bank and Gaza",
                      country == "Cayman Islands" ~ 
@@ -143,7 +149,8 @@ ecopen_wb <- wb_data(indicator = "NE.TRD.GNFS.ZS") %>%
   left_join(cbi_garriga_adj %>% select(cname, cowcode) %>% 
               distinct(cname, cowcode), 
             join_by(country == cname)) %>% 
-  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
+  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp),
+         cowcode = ifelse(cowcode == 255, 260, cowcode)) %>% 
   select(-cowcode_temp) %>% 
   rename(ecopen = NE.TRD.GNFS.ZS)
 
@@ -171,7 +178,8 @@ weo <- read.csv2("raw_data/weo_data.csv", na = c("n/a", "", "--"),
   left_join(cbi_garriga_adj %>% select(cname, cowcode) %>% 
               distinct(cname, cowcode), 
             join_by(country == cname)) %>% 
-  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp)) %>% 
+  mutate(cowcode = ifelse(is.na(cowcode_temp), cowcode, cowcode_temp),
+         cowcode = ifelse(cowcode == 255, 260, cowcode)) %>% 
   rename(gdp_current_dollar = gross_domestic_product_current_prices_u_s_dollars,
          real_gdp_pcp_ppp = gross_domestic_product_per_capita_constant_prices_purchasing_power_parity_2021_international_dollar,
          inf_avg_cpi = inflation_average_consumer_prices_index,
@@ -190,7 +198,36 @@ weo %>%
   count(iso, year) %>% 
   filter(n > 1)
 
-# 4. FINAL DATASET --------------------------------------------------------
+
+# 4. FINAL CHECK -------------------------------------------------------------
+cbi_cname <- cbi_garriga_adj %>% distinct(cowcode, cname)
+ecopen_cname <- ecopen_wb %>% distinct(cowcode, country) %>% 
+  rename(ecopen_cname = country)
+
+era_class_cname <- era_class_final %>% distinct(cowcode, country_name) %>% 
+  rename(era_classe_cname = country_name)
+
+gini_cname <- gini %>% distinct(cowcode, country) %>% 
+  rename(gini_cname = country)
+
+populism_cname <- populism %>% distinct(cowcode, country) %>% 
+  rename(populism_cname = country)
+
+vdem_cname <- vdem_dataset %>% distinct(co_wcode, country_name) %>% 
+  rename(vdem_cname = country_name)
+
+weo_cname <- weo %>% distinct(cowcode, country) %>% 
+  rename(weo_cname = country)
+
+x <- cbi_cname %>% 
+  left_join(ecopen_cname, join_by(cowcode)) %>% 
+  left_join(era_class_cname, join_by(cowcode)) %>% 
+  left_join(gini_cname, join_by(cowcode)) %>% 
+  left_join(populism_cname, join_by(cowcode)) %>% 
+  left_join(vdem_cname, join_by(cowcode == co_wcode)) %>% 
+  left_join(weo_cname, join_by(cowcode))
+
+# 5. FINAL DATASET --------------------------------------------------------
 final_dataset <- cbi_garriga_adj %>% 
   left_join(vdem_dataset %>% select(year:v2x_regime),
             join_by(year, cowcode == co_wcode)) %>% 
