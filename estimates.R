@@ -6,16 +6,19 @@ library(tidyverse)
 
 rm(list = ls())
 
-# Adicionando tratamento de poliarquia
+
+# 1. LOAD AND ADJUSTMENTS -------------------------------------------------
 final_dataset <- read_rds("processed_data/final_dataset.rds") %>% 
   mutate(treatment_polyarchy = ifelse(v2x_polyarchy >= 0.5, 1, 0))
 
-# Transformações antes de implementação
+# Adjustments
 final_dataset <- as.data.frame(final_dataset)
 final_dataset$year <- as.integer(final_dataset$year)
 final_dataset$cowcode <- as.integer(final_dataset$cowcode)
 
-# Funcoes customizadas
+
+# 2. CUSTOM FUNCTIONS -------------------------------------------------------
+# Coefficient estimates
 custom_estimate <- function(data, vtreat, vout, cov.f, qoi) {
   
   panel_data <- PanelData(data, unit.id = "cowcode", 
@@ -50,6 +53,8 @@ custom_estimate <- function(data, vtreat, vout, cov.f, qoi) {
            treatment = vtreat)
   return(df_estimate)
 }
+
+# Covariance balance
 custom_get_balance <- function(data, vtreat, vout, cov.f, qoi, cov.v){
   
   panel_data <- PanelData(data, unit.id = "cowcode", 
@@ -77,6 +82,8 @@ custom_get_balance <- function(data, vtreat, vout, cov.f, qoi, cov.v){
   
   return(cov.balance)
 }
+
+# Covariance balance plots
 plot_cov_balance <- function(data, var_labels) {
   df <- data %>% pivot_longer(
     cols = !c(time),
@@ -99,6 +106,8 @@ plot_cov_balance <- function(data, var_labels) {
     xlab("Time") +
     ylab("Standard Deviation")
 }
+
+# Obter numero de unidades pareadas
 get_matches <- function(data, vtreat, vout, cov.f, qoi) {
   
   panel_data <- PanelData(data, unit.id = "cowcode", 
@@ -126,11 +135,14 @@ get_matches <- function(data, vtreat, vout, cov.f, qoi) {
   
 }
 
-# Preliminares
+
+# 3. USEFUL OBJECTS -------------------------------------------------------
+# Covariates' vector
 covariate.vector <- c("v2x_feduni", "flex", "unflex", "gini_disp", "ind", 
                       "pop", "lpop", "ecopen", "real_gdp_pcp_ppp", 
                       "inf_avg_cpi", "unemp", "population")
 
+# Covariates labels (for the balance plots)
 label_mapping <- c(
   "v2x_feduni"       = "Division of Power Index",
   "flex"             = "Exchange Regime Relaxation",
@@ -144,13 +156,18 @@ label_mapping <- c(
   "lpop"             = "Leftist Populist",
   "pop"              = "Populist")
 
+# Covariate formulas for the panel matching
 covariate.formula <-  ~ v2x_feduni + flex + unflex + gini_disp + ind + 
   pop + lpop + ecopen + real_gdp_pcp_ppp + inf_avg_cpi + unemp + population
 
+# Outcome variables
 vd <- c("lvau_garriga", "lvaw_garriga", "cuk_ceo", "cuk_obj", "cuk_pol", 
         "cuk_limlen")
 
-# Estimacao de efeitos
+
+# 4. RESULTS --------------------------------------------------------------
+
+# Treatment effects for each outcome
 att <- map(.x = vd, ~custom_estimate(vout = .x, 
                                      data = final_dataset, 
                                      vtreat = "treatment_polyarchy",
@@ -158,6 +175,7 @@ att <- map(.x = vd, ~custom_estimate(vout = .x,
                                      qoi = "att")) %>% 
   list_rbind()
 
+# Treatment reversal effects for each outcome
 art <- map(.x = vd, ~custom_estimate(vout = .x, 
                                      data = final_dataset, 
                                      vtreat = "treatment_polyarchy",
@@ -165,8 +183,7 @@ art <- map(.x = vd, ~custom_estimate(vout = .x,
                                      qoi = "art")) %>% 
   list_rbind()
 
-# Estimation Plots
-
+# Causal plots
 att %>% 
   group_by(outcome, treatment) %>% 
   mutate(low.ci = estimate - 1.96 * std.error,
@@ -211,15 +228,14 @@ art %>%
     panel.border = element_rect(color = "black", fill = NA, linewidth = 1)  # Adiciona bordas ao redor das facetas
   )
 
-
-# Matches
+# Get number of matches
 get_matches(vout = "lvaw_garriga", 
             data = final_dataset, 
             vtreat = "treatment_polyarchy",
             cov.f = covariate.formula, 
             qoi = "att")
 
-# Covariance balance
+# Estimate covariance balance
 att_balance <- map(.x = vd, ~custom_get_balance(vout = .x, 
                                           data = final_dataset, 
                                           vtreat = "treatment_polyarchy",
@@ -237,7 +253,7 @@ art_balance <- map(.x = vd, ~custom_get_balance(
   cov.v = covariate.vector)) %>% 
   list_rbind()
 
-# Covariance balance plots
+# Plot covariates' balance
 att_balance_plot <- att_balance %>% 
   group_nest(outcome, treatment) %>% 
   mutate(
