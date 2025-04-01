@@ -37,7 +37,8 @@ cbi_missings <- cbi_garriga_adj %>%
 vdem_dataset <- vdemdata::vdem %>% 
   clean_names() %>% 
   select(country_name, country_text_id, country_id, year, co_wcode, 
-         v2x_polyarchy, e_boix_regime, e_gdppc, v2x_feduni, v2x_regime)
+         v2x_polyarchy, e_boix_regime, e_gdppc, v2x_feduni, v2x_regime) %>% 
+  mutate(co_wcode = ifelse(co_wcode == 255, 260, co_wcode))
 
 # Checking primary key
 vdem_dataset %>% 

@@ -216,7 +216,7 @@ att_plot <- att %>%
 att_plot
 
 ggsave("plots/att_plot.jpeg", att_plot, 
-       width = 12, height = 6, 
+       width = 10, height = 6, 
        dpi = 500)
 
 art_plot <- art %>% 
@@ -245,7 +245,7 @@ art_plot <- art %>%
 art_plot
 
 ggsave("plots/art_plot.jpeg", art_plot, 
-       width = 12, height = 6, 
+       width = 10, height = 6, 
        dpi = 500)
 
 # Get number of matches
@@ -300,37 +300,37 @@ heat_plot <- DisplayTreatment(
   color.of.untreated = "lightblue",  # azul mais claro
   title = "",
   xlab = "",
-  ylab = "",
+  ylab = "Countries",
   x.size = NULL,
   y.size = NULL,
-  legend.position = "none",
-  x.angle = NULL,
+  legend.position = "bottom",
+  x.angle = 90,
   y.angle = NULL,
-  legend.labels = c("not treated", "treated"),
+  legend.labels = c("Not treated", "Treated"),
   decreasing = FALSE,
   matched.set = NULL,   # Usa apenas o primeiro conjunto
   show.set.only = FALSE,
   hide.x.tick.label = FALSE,
   hide.y.tick.label = TRUE,
   gradient.weights = FALSE,
-  dense.plot = TRUE   # ativa o modo denso
+  dense.plot = T   # ativa o modo denso
 )
 
 heat_plot
 
 ggsave("plots/heat_plot.jpeg", heat_plot, 
-       width = 20, height = 10, 
+       width = 8, height = 8, 
        dpi = 500)
 
 # Histogram
 lvaw_hist <- final_dataset %>% ggplot(aes(x = lvaw_garriga)) +
   geom_histogram(color="black", fill="grey", binwidth=0.05) +
   theme_minimal() +
-  xlab("Central Bank Index (raw average)") +
-  ylab("Frequêncy")
+  xlab("Central Bank Index (weighted average)") +
+  ylab("Frequency")
 
 ggsave("plots/lvaw_hist.jpeg", lvaw_hist, 
-       width = 15, height = 7, 
+       width = 6, height = 3, 
        dpi = 500)
 
 # leftover ----------------------------------------------------------------
