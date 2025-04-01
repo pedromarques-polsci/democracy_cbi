@@ -166,7 +166,6 @@ vd <- c("lvau_garriga", "lvaw_garriga", "cuk_ceo", "cuk_obj", "cuk_pol",
 
 
 # 4. RESULTS --------------------------------------------------------------
-
 # Treatment effects for each outcome
 att <- map(.x = vd, ~custom_estimate(vout = .x, 
                                      data = final_dataset, 
@@ -183,17 +182,25 @@ art <- map(.x = vd, ~custom_estimate(vout = .x,
                                      qoi = "art")) %>% 
   list_rbind()
 
+
 # Causal plots
-att %>% 
-  group_by(outcome, treatment) %>% 
+facet_labels <- c("Personnel independence", "Limits on lending", 
+                  "Objectives", "Policy independence", 
+                  "CBI (raw average)", "CBI (weighted average)")
+
+names(facet_labels) <- c("cuk_ceo", "cuk_limlen", "cuk_obj", "cuk_pol", 
+                         "lvau_garriga", "lvaw_garriga")
+
+att_plot <- att %>% 
   mutate(low.ci = estimate - 1.96 * std.error,
          high.ci = estimate + 1.96 * std.error) %>% 
   ungroup() %>% 
-  ggplot(aes(x = time, y = estimate, color = treatment)) +
+  ggplot(aes(x = time, y = estimate)) +
   geom_point(size = 3) +  # Aumenta o tamanho dos pontos
   geom_errorbar(aes(ymin = low.ci, ymax = high.ci), width = 0.2, size = 1) +  # Barras de erro mais visíveis
   geom_hline(yintercept = 0, linetype = 'dashed', color = "black") +  # Linha de referência
-  facet_wrap(~outcome) +  # Mantendo a escala do eixo Y padronizada
+  facet_wrap(~outcome,
+             labeller = labeller(outcome = facet_labels)) +  # Mantendo a escala do eixo Y padronizada
   theme_minimal(base_size = 14) +  # Tema mais limpo
   labs(x = "", y = "Treatment Effect", color = "Treatment") +  # Rótulos informativos
   scale_color_manual(values = c("black", "red")) +  # Define cores para os tratamentos
@@ -206,16 +213,23 @@ att %>%
     panel.border = element_rect(color = "black", fill = NA, linewidth = 1)  # Adiciona bordas ao redor das facetas
   )
 
-art %>% 
+att_plot
+
+ggsave("plots/att_plot.jpeg", att_plot, 
+       width = 12, height = 6, 
+       dpi = 500)
+
+art_plot <- art %>% 
   group_by(outcome, treatment) %>% 
   mutate(low.ci = estimate - 1.96 * std.error,
          high.ci = estimate + 1.96 * std.error) %>% 
   ungroup() %>% 
-  ggplot(aes(x = time, y = estimate, color = treatment)) +
+  ggplot(aes(x = time, y = estimate)) +
   geom_point(size = 3) +  # Aumenta o tamanho dos pontos
   geom_errorbar(aes(ymin = low.ci, ymax = high.ci), width = 0.2, size = 1) +  # Barras de erro mais visíveis
   geom_hline(yintercept = 0, linetype = 'dashed', color = "black") +  # Linha de referência
-  facet_wrap(~outcome) +  # Mantendo a escala do eixo Y padronizada
+  facet_wrap(~outcome,
+             labeller = labeller(outcome = facet_labels)) +  # Mantendo a escala do eixo Y padronizada
   theme_minimal(base_size = 14) +  # Tema mais limpo
   labs(x = "", y = "Treatment Reversal Effect", color = "Treatment") +  # Rótulos informativos
   scale_color_manual(values = c("black", "red")) +  # Define cores para os tratamentos
@@ -227,6 +241,12 @@ art %>%
     panel.spacing = unit(1, "lines"),  # Aumenta o espaço entre os gráficos
     panel.border = element_rect(color = "black", fill = NA, linewidth = 1)  # Adiciona bordas ao redor das facetas
   )
+
+art_plot
+
+ggsave("plots/art_plot.jpeg", art_plot, 
+       width = 12, height = 6, 
+       dpi = 500)
 
 # Get number of matches
 get_matches(vout = "lvaw_garriga", 
@@ -274,11 +294,11 @@ generic_panel_dataset <- PanelData(final_dataset, unit.id = "cowcode",
                                         treatment = "treatment_polyarchy", 
                                         outcome = "lvaw_garriga")
 
-DisplayTreatment(
+heat_plot <- DisplayTreatment(
   panel.data = generic_panel_dataset,
   color.of.treated = "red",
   color.of.untreated = "lightblue",  # azul mais claro
-  title = "Treatment Plot - Polyarchy",
+  title = "",
   xlab = "",
   ylab = "",
   x.size = NULL,
@@ -295,3 +315,53 @@ DisplayTreatment(
   gradient.weights = FALSE,
   dense.plot = TRUE   # ativa o modo denso
 )
+
+heat_plot
+
+ggsave("plots/heat_plot.jpeg", heat_plot, 
+       width = 20, height = 10, 
+       dpi = 500)
+
+# Histogram
+lvaw_hist <- final_dataset %>% ggplot(aes(x = lvaw_garriga)) +
+  geom_histogram(color="black", fill="grey", binwidth=0.05) +
+  theme_minimal() +
+  xlab("Central Bank Index (raw average)") +
+  ylab("Frequêncy")
+
+ggsave("plots/lvaw_hist.jpeg", lvaw_hist, 
+       width = 15, height = 7, 
+       dpi = 500)
+
+# leftover ----------------------------------------------------------------
+x <- PanelData(final_dataset, unit.id = "cowcode", 
+                        time.id = "year", 
+                        treatment = "treatment_polyarchy", 
+                        outcome = "cuk_limlen")
+
+y <- PanelMatch(
+  lag = 4, 
+  refinement.method = "CBPS.weight",
+  panel.data = x, 
+  match.missing = TRUE, 
+  covs.formula = covariate.formula, 
+  qoi = "att", 
+  lead = 0:4, 
+  forbid.treatment.reversal = TRUE, 
+  listwise.delete = FALSE
+)
+
+w <- PanelEstimate(sets = y, 
+                         panel.data = x, 
+                         number.iterations = 1000, 
+                         se.method = "bootstrap")
+
+w %>% plot()
+
+df_estimate <- data.frame(
+  time = names(w$estimate),
+  estimate = unlist(w$estimate),
+  std.error = unlist(w$standard.error),
+  row.names = NULL
+) %>% mutate(low.ci = estimate - 1.96 * std.error,
+             high.ci = estimate + 1.96 * std.error)
