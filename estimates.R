@@ -1,11 +1,11 @@
 # Packages ----------------------------------------------------------------
 library(dplyr)
+library(janitor)
 library(ggplot2)
 library(PanelMatch)
 library(tidyverse)
 
 rm(list = ls())
-
 
 # 1. LOAD AND ADJUSTMENTS -------------------------------------------------
 final_dataset <- read_rds("processed_data/final_dataset.rds") %>% 
@@ -43,14 +43,22 @@ custom_estimate <- function(data, vtreat, vout, cov.f, qoi) {
                            number.iterations = 1000, 
                            se.method = "bootstrap")
   
-  df_estimate <- data.frame(
-    time = names(results$estimate),
-    estimate = unlist(results$estimate),
-    std.error = unlist(results$standard.error),
-    row.names = NULL
-  ) %>% 
+  df_estimate <- results %>% 
+    summary() %>% 
+    as.data.frame(row.names = NULL) %>% 
     mutate(outcome = vout,
-           treatment = vtreat)
+           treatment = vtreat) %>% 
+    rownames_to_column("time")
+  
+  # df_estimate <- data.frame(
+  #   time = names(results$estimate),
+  #   estimate = unlist(results$estimate),
+  #   std.error = unlist(results$standard.error),
+  #   row.names = NULL
+  # ) %>% 
+  #   mutate(outcome = vout,
+  #          treatment = vtreat)
+  
   return(df_estimate)
 }
 
@@ -182,6 +190,16 @@ art <- map(.x = vd, ~custom_estimate(vout = .x,
                                      qoi = "art")) %>% 
   list_rbind()
 
+# Adjustments
+att <- att %>% clean_names() %>% rename(low.ci = x2_5_percent, 
+                                          high.ci = x97_5_percent)
+
+art <- art %>% clean_names() %>% rename(low.ci = x2_5_percent, 
+                                        high.ci = x97_5_percent)
+
+# Output
+att %>% select(outcome, everything(), -treatment)
+art %>% select(outcome, everything(), -treatment)
 
 # Causal plots
 facet_labels <- c("Personnel independence", "Limits on lending", 
@@ -191,9 +209,7 @@ facet_labels <- c("Personnel independence", "Limits on lending",
 names(facet_labels) <- c("cuk_ceo", "cuk_limlen", "cuk_obj", "cuk_pol", 
                          "lvau_garriga", "lvaw_garriga")
 
-att_plot <- att %>% 
-  mutate(low.ci = estimate - 1.96 * std.error,
-         high.ci = estimate + 1.96 * std.error) %>% 
+att_plot <- teste %>% 
   ungroup() %>% 
   ggplot(aes(x = time, y = estimate)) +
   geom_point(size = 3) +  # Aumenta o tamanho dos pontos
@@ -221,8 +237,6 @@ ggsave("plots/att_plot.jpeg", att_plot,
 
 art_plot <- art %>% 
   group_by(outcome, treatment) %>% 
-  mutate(low.ci = estimate - 1.96 * std.error,
-         high.ci = estimate + 1.96 * std.error) %>% 
   ungroup() %>% 
   ggplot(aes(x = time, y = estimate)) +
   geom_point(size = 3) +  # Aumenta o tamanho dos pontos
@@ -357,6 +371,10 @@ w <- PanelEstimate(sets = y,
                          se.method = "bootstrap")
 
 w %>% plot()
+
+teste <- w %>% 
+  summary() %>% as.data.frame(row.names = NULL) %>% 
+  rownames_to_column("time")
 
 df_estimate <- data.frame(
   time = names(w$estimate),
