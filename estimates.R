@@ -1,4 +1,5 @@
 # Packages ----------------------------------------------------------------
+library(countrycode)
 library(dplyr)
 library(janitor)
 library(ggplot2)
@@ -9,15 +10,91 @@ rm(list = ls())
 
 # 1. LOAD AND ADJUSTMENTS -------------------------------------------------
 final_dataset <- read_rds("processed_data/final_dataset.rds") %>% 
-  mutate(treatment_polyarchy = ifelse(v2x_polyarchy >= 0.5, 1, 0))
+  mutate(treatment_polyarchy = ifelse(v2x_polyarchy >= 0.5, 1, 0),
+         log_gdp = log(real_gdp_pcp_ppp),
+         log_population = log(population))
 
 # Adjustments
 final_dataset <- as.data.frame(final_dataset)
 final_dataset$year <- as.integer(final_dataset$year)
 final_dataset$cowcode <- as.integer(final_dataset$cowcode)
 
+# 2. DESCRIPTIVE STATISTICS -------------------------------------------------
+# One year
+desc_1y <- final_dataset %>% 
+  group_by(cowcode) %>% 
+  arrange(year) %>% 
+  mutate(treat_timing = treatment_polyarchy - dplyr::lag(treatment_polyarchy),
+         treat_lag = dplyr::lag(treat_timing),
+         treat_lead = dplyr::lead(treat_timing)) %>% 
+  ungroup()
 
-# 2. CUSTOM FUNCTIONS -------------------------------------------------------
+desc_select_1y <- desc_1y %>% 
+  filter(treat_timing == 1 | treat_lag == 1 | treat_lead == 1) %>% 
+  group_by(cowcode) %>% 
+  arrange(year) %>% 
+  mutate(iso3c = countrycode(cowcode, origin = 'cown', 
+                             destination = 'iso3c'),
+         iso3c = ifelse(cowcode == 345, "YUG", iso3c),
+         treat_id = case_when(
+           treat_timing == 1 ~ paste0(iso3c, year),
+           treat_lag == 1 ~ paste0(iso3c, dplyr::lag(year)),
+           treat_lead == 1 ~ paste0(iso3c, dplyr::lead(year)))) %>% 
+  group_by(treat_id) %>% 
+  reframe(post_garriga = lvaw_garriga[treat_lag == 1] - 
+            lvaw_garriga[treat_lead == 1])
+
+cbi_oneyear <- desc_select_1y %>% 
+  filter(post_garriga != 0) %>% 
+  ggplot(aes(x = fct_reorder(treat_id, post_garriga), y = post_garriga)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  theme_minimal() +
+  coord_flip() +
+  ylab("Absolute Difference") +
+  xlab("Democratization Spell (ISO3C/YEAR)") +
+  theme(text = element_text(size = 18)) 
+
+# Two years
+desc_2y <- final_dataset %>% 
+  group_by(cowcode) %>% 
+  arrange(year) %>% 
+  mutate(treat_timing = treatment_polyarchy - dplyr::lag(treatment_polyarchy),
+         treat_lag = dplyr::lag(treat_timing, n = 2),
+         treat_lead = dplyr::lead(treat_timing, n = 2)) %>% 
+  ungroup()
+
+desc_select_2y <- desc_2y %>% 
+  filter(treat_timing == 1 | treat_lag == 1 | treat_lead == 1) %>% 
+  group_by(cowcode) %>% 
+  arrange(year) %>% 
+  mutate(iso3c = countrycode(cowcode, origin = 'cown', 
+                             destination = 'iso3c'),
+         iso3c = ifelse(cowcode == 345, "YUG", iso3c),
+         treat_id = case_when(
+           treat_timing == 1 ~ paste0(iso3c, year),
+           treat_lag == 1 ~ paste0(iso3c, year - 2),
+           treat_lead == 1 ~ paste0(iso3c, year +2))) %>% 
+  group_by(treat_id) %>% 
+  reframe(post_garriga = lvaw_garriga[treat_lag == 1] - 
+            lvaw_garriga[treat_lead == 1])
+
+cbi_twoyear <- desc_select_2y %>% 
+  filter(post_garriga != 0) %>% 
+  ggplot(aes(x = fct_reorder(treat_id, post_garriga), y = post_garriga)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  theme_minimal() +
+  coord_flip() +
+  ylab("CBI Absolute Difference") +
+  xlab("Democratization Spell (ISO3C/YEAR)") +
+  theme(text = element_text(size = 18)) 
+
+ggsave("plots/cbi_oneyear.jpeg", plot = cbi_oneyear, dpi = 500,
+       width = 11, height = 7)
+
+ggsave("plots/cbi_twoyear.jpeg", plot = cbi_twoyear, dpi = 500,
+       width = 11, height = 7)
+
+# 3. CUSTOM FUNCTIONS -------------------------------------------------------
 # Coefficient estimates
 custom_estimate <- function(data, vtreat, vout, cov.f, qoi) {
   
@@ -144,7 +221,7 @@ get_matches <- function(data, vtreat, vout, cov.f, qoi) {
 }
 
 
-# 3. USEFUL OBJECTS -------------------------------------------------------
+# 4. USEFUL OBJECTS -------------------------------------------------------
 # Covariates' vector
 covariate.vector <- c("v2x_feduni", "flex", "unflex", "gini_disp", "ind", 
                       "pop", "lpop", "ecopen", "real_gdp_pcp_ppp", 
@@ -173,7 +250,7 @@ vd <- c("lvau_garriga", "lvaw_garriga", "cuk_ceo", "cuk_obj", "cuk_pol",
         "cuk_limlen")
 
 
-# 4. RESULTS --------------------------------------------------------------
+# 5. RESULTS --------------------------------------------------------------
 # Treatment effects for each outcome
 att <- map(.x = vd, ~custom_estimate(vout = .x, 
                                      data = final_dataset, 
@@ -348,6 +425,14 @@ ggsave("plots/lvaw_hist.jpeg", lvaw_hist,
        dpi = 500)
 
 # leftover ----------------------------------------------------------------
+leftover_cov <- c("v2x_feduni", "flex", "unflex", "gini_disp", "ind", 
+                      "pop", "lpop", "ecopen", "log_gdp", 
+                      "inf_avg_cpi", "unemp", "log_population")
+
+leftover_formula <-  ~ v2x_feduni + flex + unflex + gini_disp + ind + 
+  pop + lpop + ecopen + log_gdp + inf_avg_cpi + unemp + 
+  log_population
+
 x <- PanelData(final_dataset, unit.id = "cowcode", 
                         time.id = "year", 
                         treatment = "treatment_polyarchy", 
@@ -358,7 +443,7 @@ y <- PanelMatch(
   refinement.method = "CBPS.weight",
   panel.data = x, 
   match.missing = TRUE, 
-  covs.formula = covariate.formula, 
+  covs.formula = leftover_formula, 
   qoi = "att", 
   lead = 0:4, 
   forbid.treatment.reversal = TRUE, 
