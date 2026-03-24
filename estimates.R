@@ -20,7 +20,9 @@ final_dataset$year <- as.integer(final_dataset$year)
 final_dataset$cowcode <- as.integer(final_dataset$cowcode)
 
 # 2. DESCRIPTIVE STATISTICS -------------------------------------------------
-# One year
+
+
+## CBI CHANGE AFTER DEMOCRATIZING -------------------------------------------
 desc_1y <- final_dataset %>% 
   group_by(cowcode) %>% 
   arrange(year) %>% 
@@ -92,6 +94,87 @@ ggsave("plots/cbi_oneyear.jpeg", plot = cbi_oneyear, dpi = 500,
        width = 11, height = 7)
 
 ggsave("plots/cbi_twoyear.jpeg", plot = cbi_twoyear, dpi = 500,
+       width = 11, height = 7)
+
+
+## CBI TRENDS --------------------------------------------------------------
+final_dataset %>% filter(!is.na(lvaw_garriga), !is.na(treatment_polyarchy)) %>% 
+  count(cowcode)
+
+country_bg <- final_dataset %>% 
+  filter(year == 1970, treatment_polyarchy == 0) %>% 
+  pull(cowcode)
+
+country_treat <- final_dataset %>% 
+  filter(cowcode %in% country_bg, year == 2019, treatment_polyarchy == 1) %>% 
+  pull(cowcode)
+
+country_control <- final_dataset %>% 
+  filter(cowcode %in% country_bg, year == 2019, treatment_polyarchy == 0) %>% 
+  pull(cowcode)
+
+cbi_trends <- final_dataset %>% filter(year %in% c(1970, 2019), 
+                                       cowcode %in% country_bg) %>% 
+  group_by(cowcode) %>% 
+  mutate(treatment_polyarchy = max(treatment_polyarchy, na.rm = T)) %>% 
+  group_by(treatment_polyarchy, year) %>% 
+  reframe(mean_cbi = mean(lvaw_garriga, na.rm = T))
+
+cbi_trends
+
+cbi_trends_plot <- cbi_trends %>% 
+  mutate(treatment_polyarchy = case_when(
+    treatment_polyarchy == 1 ~ "Treated",
+    treatment_polyarchy == 0 ~ "Not treated"
+  )) %>% 
+  ggplot(aes(x = year, y = mean_cbi, group = treatment_polyarchy)) +
+  geom_line(aes(linetype = treatment_polyarchy), linewidth = 1) +
+  geom_point(aes(shape = treatment_polyarchy), size = 5) +
+  geom_text(aes(x = year, y = mean_cbi, 
+                label = round(mean_cbi, 2)),
+            vjust = 2) +
+  theme_minimal() +
+  labs(x = "Year", y = "CBI Mean Value", linetype = "Treatment",
+       shape = "Treatment") +
+  theme(text = element_text(size = 18)) +
+  scale_x_continuous(breaks = c(1970, 2019))
+
+cbi_trends_plot
+
+ggsave("plots/cbi_trends_plot.jpeg", plot = cbi_trends_plot, dpi = 500,
+       width = 11, height = 7)
+
+
+## LATIN AMERICA TIME SERIES -----------------------------------------------
+latam <- c("ARG", "BOL", "BRA", "CHL", "COL", "ECU", "GUY", "PRY",
+           "PER", "SUR", "URY", "VEN", 
+           "CRI", "CUB", "DOM", "SLV", "GUF", "GTM", "HTI",
+           "HND", "MEX", "NIC", "PAN")
+
+dem_timing_df <- final_dataset %>%
+  group_by(cowcode) %>%
+  arrange(year) %>% 
+  mutate(treat_timing = treatment_polyarchy - dplyr::lag(treatment_polyarchy)) %>% 
+  filter(treat_timing == 1) %>%
+  summarise(dem_year = first(year))
+
+facet_latam <- final_dataset %>% 
+  left_join(dem_timing_df) %>% 
+  mutate(iso3c = countrycode(cowcode, origin = 'cown', 
+                             destination = 'iso3c'),
+         iso3c = ifelse(cowcode == 345, "YUG", iso3c)) %>% 
+  filter(iso3c %in% latam,
+         !iso3c %in% c("CRI", "CUB", "HTI", "VEN", "ECU")) %>% 
+  ggplot(aes(x = year, y = lvaw_garriga)) +
+  geom_line() +
+  geom_vline(aes(xintercept = dem_year), linetype = "dashed") +
+  theme_minimal() +
+  labs(x = "Year", y = "Weighted CBI") +
+  theme(text = element_text(size = 18),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  facet_wrap(~iso3c, scales = "free_y")
+
+ggsave("plots/facet_latam.jpeg", plot = facet_latam, dpi = 500,
        width = 11, height = 7)
 
 # 3. CUSTOM FUNCTIONS -------------------------------------------------------
