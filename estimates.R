@@ -21,7 +21,6 @@ final_dataset$cowcode <- as.integer(final_dataset$cowcode)
 
 # 2. DESCRIPTIVE STATISTICS -------------------------------------------------
 
-
 ## CBI CHANGE AFTER DEMOCRATIZING -------------------------------------------
 desc_1y <- final_dataset %>% 
   group_by(cowcode) %>% 
@@ -67,7 +66,7 @@ desc_2y <- final_dataset %>%
   arrange(year) %>% 
   mutate(treat_timing = treatment_polyarchy - dplyr::lag(treatment_polyarchy),
          treat_lag = dplyr::lag(treat_timing, n = 2),
-         treat_lead = dplyr::lead(treat_timing, n = 2)) %>% 
+         treat_lead = dplyr::lead(treat_timing, n = 1)) %>% 
   ungroup()
 
 desc_select_2y <- desc_2y %>% 
@@ -80,7 +79,7 @@ desc_select_2y <- desc_2y %>%
          treat_id = case_when(
            treat_timing == 1 ~ paste0(iso3c, year),
            treat_lag == 1 ~ paste0(iso3c, year - 2),
-           treat_lead == 1 ~ paste0(iso3c, year +2))) %>% 
+           treat_lead == 1 ~ paste0(iso3c, year +1))) %>% 
   group_by(treat_id) %>% 
   reframe(post_garriga = lvaw_garriga[treat_lag == 1] - 
             lvaw_garriga[treat_lead == 1])
@@ -92,8 +91,11 @@ desc_select_2y %>%
 
 desc_select_2y %>% 
   filter(!is.na(post_garriga)) %>% 
-  reframe(n = n(post_garriga > 0),
-          n_not = n(post_garriga == 0))
+  mutate(n = case_when(
+    post_garriga > 0 ~ "Positive Change",
+    post_garriga < 0 ~ "Negative Change",
+    post_garriga == 0 ~ "No Change")) %>% 
+  count(n)
 
 cbi_twoyear <- desc_select_2y %>% 
   filter(post_garriga != 0) %>% 
@@ -317,7 +319,6 @@ get_matches <- function(data, vtreat, vout, cov.f, qoi) {
   
 }
 
-
 # 4. USEFUL OBJECTS -------------------------------------------------------
 # Covariates' vector
 covariate.vector <- c("v2x_feduni", "flex", "unflex", "gini_disp", "ind", 
@@ -345,7 +346,6 @@ covariate.formula <-  ~ v2x_feduni + flex + unflex + gini_disp + ind +
 # Outcome variables
 vd <- c("lvau_garriga", "lvaw_garriga", "cuk_ceo", "cuk_obj", "cuk_pol", 
         "cuk_limlen")
-
 
 # 5. RESULTS --------------------------------------------------------------
 # Treatment effects for each outcome
@@ -383,7 +383,7 @@ facet_labels <- c("Personnel independence", "Limits on lending",
 names(facet_labels) <- c("cuk_ceo", "cuk_limlen", "cuk_obj", "cuk_pol", 
                          "lvau_garriga", "lvaw_garriga")
 
-att_plot <- teste %>% 
+att_plot <- att %>% 
   ungroup() %>% 
   ggplot(aes(x = time, y = estimate)) +
   geom_point(size = 3) +  # Aumenta o tamanho dos pontos
