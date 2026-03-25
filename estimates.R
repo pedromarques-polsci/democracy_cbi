@@ -12,7 +12,17 @@ rm(list = ls())
 final_dataset <- read_rds("processed_data/final_dataset.rds") %>% 
   mutate(treatment_polyarchy = ifelse(v2x_polyarchy >= 0.5, 1, 0),
          log_gdp = log(real_gdp_pcp_ppp),
-         log_population = log(population))
+         log_population = log(population),
+         treatment_row = case_when(
+           v2x_regime %in% c(0, 1) ~ 0,
+           v2x_regime %in% c(2, 3) ~ 1,
+           is.na(v2x_regime) ~ NA
+         ),
+         treatment_row_electoral_regime = case_when(
+           v2x_regime %in% c(0) ~ 0,
+           v2x_regime %in% c(1, 2, 3) ~ 1,
+           is.na(v2x_regime) ~ NA
+         ))
 
 # Adjustments
 final_dataset <- as.data.frame(final_dataset)
@@ -25,7 +35,7 @@ final_dataset$cowcode <- as.integer(final_dataset$cowcode)
 desc_1y <- final_dataset %>% 
   group_by(cowcode) %>% 
   arrange(year) %>% 
-  mutate(treat_timing = treatment_polyarchy - dplyr::lag(treatment_polyarchy),
+  mutate(treat_timing = treatment_row - dplyr::lag(treatment_row),
          treat_lag = dplyr::lag(treat_timing),
          treat_lead = dplyr::lead(treat_timing)) %>% 
   ungroup()
@@ -64,7 +74,7 @@ cbi_oneyear <- desc_select_1y %>%
 desc_2y <- final_dataset %>% 
   group_by(cowcode) %>% 
   arrange(year) %>% 
-  mutate(treat_timing = treatment_polyarchy - dplyr::lag(treatment_polyarchy),
+  mutate(treat_timing = treatment_row - dplyr::lag(treatment_row),
          treat_lag = dplyr::lag(treat_timing, n = 2),
          treat_lead = dplyr::lead(treat_timing, n = 1)) %>% 
   ungroup()
@@ -114,38 +124,38 @@ ggsave("plots/cbi_twoyear.jpeg", plot = cbi_twoyear, dpi = 500,
        width = 11, height = 7)
 
 ## CBI TRENDS --------------------------------------------------------------
-final_dataset %>% filter(!is.na(lvaw_garriga), !is.na(treatment_polyarchy)) %>% 
+final_dataset %>% filter(!is.na(lvaw_garriga), !is.na(treatment_row)) %>% 
   count(cowcode)
 
 country_bg <- final_dataset %>% 
-  filter(year == 1970, treatment_polyarchy == 0) %>% 
+  filter(year == 1970, treatment_row == 0) %>% 
   pull(cowcode)
 
 country_treat <- final_dataset %>% 
-  filter(cowcode %in% country_bg, year == 2019, treatment_polyarchy == 1) %>% 
+  filter(cowcode %in% country_bg, year == 2019, treatment_row == 1) %>% 
   pull(cowcode)
 
 country_control <- final_dataset %>% 
-  filter(cowcode %in% country_bg, year == 2019, treatment_polyarchy == 0) %>% 
+  filter(cowcode %in% country_bg, year == 2019, treatment_row == 0) %>% 
   pull(cowcode)
 
 cbi_trends <- final_dataset %>% filter(year %in% c(1970, 2019), 
                                        cowcode %in% country_bg) %>% 
   group_by(cowcode) %>% 
-  mutate(treatment_polyarchy = max(treatment_polyarchy, na.rm = T)) %>% 
-  group_by(treatment_polyarchy, year) %>% 
+  mutate(treatment_row = max(treatment_row, na.rm = T)) %>% 
+  group_by(treatment_row, year) %>% 
   reframe(mean_cbi = mean(lvaw_garriga, na.rm = T))
 
 cbi_trends
 
 cbi_trends_plot <- cbi_trends %>% 
-  mutate(treatment_polyarchy = case_when(
-    treatment_polyarchy == 1 ~ "Treated",
-    treatment_polyarchy == 0 ~ "Not treated"
+  mutate(treatment_row = case_when(
+    treatment_row == 1 ~ "Treated",
+    treatment_row == 0 ~ "Not treated"
   )) %>% 
-  ggplot(aes(x = year, y = mean_cbi, group = treatment_polyarchy)) +
-  geom_line(aes(linetype = treatment_polyarchy), linewidth = 1) +
-  geom_point(aes(shape = treatment_polyarchy), size = 5) +
+  ggplot(aes(x = year, y = mean_cbi, group = treatment_row)) +
+  geom_line(aes(linetype = treatment_row), linewidth = 1) +
+  geom_point(aes(shape = treatment_row), size = 5) +
   geom_text(aes(x = year, y = mean_cbi, 
                 label = round(mean_cbi, 2)),
             vjust = 2) +
@@ -170,7 +180,7 @@ latam <- c("ARG", "BOL", "BRA", "CHL", "COL", "ECU", "GUY", "PRY",
 dem_timing_df <- final_dataset %>%
   group_by(cowcode) %>%
   arrange(year) %>% 
-  mutate(treat_timing = treatment_polyarchy - dplyr::lag(treatment_polyarchy)) %>% 
+  mutate(treat_timing = treatment_row - dplyr::lag(treatment_row)) %>% 
   filter(treat_timing == 1) %>%
   summarise(dem_year = first(year))
 
@@ -351,7 +361,7 @@ vd <- c("lvau_garriga", "lvaw_garriga", "cuk_ceo", "cuk_obj", "cuk_pol",
 # Treatment effects for each outcome
 att <- map(.x = vd, ~custom_estimate(vout = .x, 
                                      data = final_dataset, 
-                                     vtreat = "treatment_polyarchy",
+                                     vtreat = "treatment_row",
                                      cov.f = covariate.formula, 
                                      qoi = "att")) %>% 
   list_rbind()
@@ -359,7 +369,7 @@ att <- map(.x = vd, ~custom_estimate(vout = .x,
 # Treatment reversal effects for each outcome
 art <- map(.x = vd, ~custom_estimate(vout = .x, 
                                      data = final_dataset, 
-                                     vtreat = "treatment_polyarchy",
+                                     vtreat = "treatment_row",
                                      cov.f = covariate.formula, 
                                      qoi = "art")) %>% 
   list_rbind()
@@ -439,14 +449,14 @@ ggsave("plots/art_plot.jpeg", art_plot,
 # Get number of matches
 get_matches(vout = "lvaw_garriga", 
             data = final_dataset, 
-            vtreat = "treatment_polyarchy",
+            vtreat = "treatment_row",
             cov.f = covariate.formula, 
             qoi = "att")
 
 # Estimate covariance balance
 att_balance <- map(.x = vd, ~custom_get_balance(vout = .x, 
                                           data = final_dataset, 
-                                          vtreat = "treatment_polyarchy",
+                                          vtreat = "treatment_row",
                                           cov.f = covariate.formula, 
                                           qoi = "att",
                                           cov.v = covariate.vector)) %>% 
@@ -455,7 +465,7 @@ att_balance <- map(.x = vd, ~custom_get_balance(vout = .x,
 art_balance <- map(.x = vd, ~custom_get_balance(
   vout = .x, 
   data = final_dataset, 
-  vtreat = "treatment_polyarchy",
+  vtreat = "treatment_row",
   cov.f = covariate.formula, 
   qoi = "art",
   cov.v = covariate.vector)) %>% 
@@ -479,7 +489,7 @@ art_balance_plot <- art_balance %>%
 # Heat Plot
 generic_panel_dataset <- PanelData(final_dataset, unit.id = "cowcode", 
                                         time.id = "year", 
-                                        treatment = "treatment_polyarchy", 
+                                        treatment = "treatment_row", 
                                         outcome = "lvaw_garriga")
 
 heat_plot <- DisplayTreatment(
@@ -532,7 +542,7 @@ leftover_formula <-  ~ v2x_feduni + flex + unflex + gini_disp + ind +
 
 x <- PanelData(final_dataset, unit.id = "cowcode", 
                         time.id = "year", 
-                        treatment = "treatment_polyarchy", 
+                        treatment = "treatment_row", 
                         outcome = "cuk_limlen")
 
 y <- PanelMatch(
