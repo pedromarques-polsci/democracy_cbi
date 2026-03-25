@@ -46,6 +46,11 @@ desc_select_1y <- desc_1y %>%
   reframe(post_garriga = lvaw_garriga[treat_lag == 1] - 
             lvaw_garriga[treat_lead == 1])
 
+desc_select_1y %>% 
+  filter(!is.na(post_garriga)) %>% 
+  reframe(mean = mean(post_garriga > 0, na.rm = T),
+                           mean_not = mean(post_garriga == 0, na.rm = T))
+
 cbi_oneyear <- desc_select_1y %>% 
   filter(post_garriga != 0) %>% 
   ggplot(aes(x = fct_reorder(treat_id, post_garriga), y = post_garriga)) +
@@ -80,6 +85,16 @@ desc_select_2y <- desc_2y %>%
   reframe(post_garriga = lvaw_garriga[treat_lag == 1] - 
             lvaw_garriga[treat_lead == 1])
 
+desc_select_2y %>% 
+  filter(!is.na(post_garriga)) %>% 
+  reframe(mean = mean(post_garriga > 0, na.rm = T),
+          mean_not = mean(post_garriga == 0, na.rm = T))
+
+desc_select_2y %>% 
+  filter(!is.na(post_garriga)) %>% 
+  reframe(n = n(post_garriga > 0),
+          n_not = n(post_garriga == 0))
+
 cbi_twoyear <- desc_select_2y %>% 
   filter(post_garriga != 0) %>% 
   ggplot(aes(x = fct_reorder(treat_id, post_garriga), y = post_garriga)) +
@@ -95,7 +110,6 @@ ggsave("plots/cbi_oneyear.jpeg", plot = cbi_oneyear, dpi = 500,
 
 ggsave("plots/cbi_twoyear.jpeg", plot = cbi_twoyear, dpi = 500,
        width = 11, height = 7)
-
 
 ## CBI TRENDS --------------------------------------------------------------
 final_dataset %>% filter(!is.na(lvaw_garriga), !is.na(treatment_polyarchy)) %>% 
