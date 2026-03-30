@@ -531,6 +531,9 @@ ggsave("plots/lvaw_hist.jpeg", lvaw_hist,
        width = 6, height = 3, 
        dpi = 500)
 
+write.csv2(x = att, file = "processed_data/att.csv")
+write.csv2(x = art, file = "processed_data/art.csv")
+
 # leftover ----------------------------------------------------------------
 leftover_cov <- c("v2x_feduni", "flex", "unflex", "gini_disp", "ind", 
                       "pop", "lpop", "ecopen", "log_gdp", 
